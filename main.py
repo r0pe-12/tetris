@@ -1,6 +1,9 @@
 import sys
 import pygame
 import random
+import requests
+import tkinter as tk
+from tkinter import simpledialog
 
 pygame.init()
 
@@ -22,6 +25,7 @@ BG_COLOR = (31, 25, 76)
 GRID = (31, 25, 132)
 WIN = (50, 230, 50)
 LOSE = (252, 91, 122)
+API_ENDPOINT = "https://udg.tetris.simonovicp.com/save_score"
 
 # assets
 ASSETS = {
@@ -183,11 +187,122 @@ class Tetris:
         SCREEN.blit(option2, (popup.centerx - option2.get_width() // 2, popup.y + 110))
 
 
+def get_username(screen_width=WIDTH, screen_height=HEIGHT):
+    """
+        Custom Pygame username input dialog
+        """
+    # Create a new window for username input
+    username_screen = pygame.display.set_mode((screen_width, screen_height))
+    pygame.display.set_caption('Enter Username')
+
+    # Colors
+    BG_COLOR = (31, 25, 76)
+    WHITE = (255, 255, 255)
+    INPUT_COLOR = (50, 50, 100)
+    ACTIVE_COLOR = (70, 70, 130)
+    TEXT_COLOR = (255, 255, 255)
+
+    # Fonts
+    title_font = pygame.font.SysFont('Inter', 30)
+    input_font = pygame.font.SysFont('Inter', 25)
+
+    # Input box
+    input_box = pygame.Rect(50, 250, screen_width - 100, 50)
+    color_inactive = INPUT_COLOR
+    color_active = ACTIVE_COLOR
+    color = color_inactive
+    active = False
+    text = ''
+    done = False
+
+    while not done:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                # If the user clicked on the input_box rect
+                if input_box.collidepoint(event.pos):
+                    # Toggle the active variable
+                    active = not active
+                else:
+                    active = False
+                # Change the input box color
+                color = color_active if active else color_inactive
+
+            if event.type == pygame.KEYDOWN:
+                if active:
+                    if event.key == pygame.K_RETURN:
+                        done = True
+                    elif event.key == pygame.K_BACKSPACE:
+                        text = text[:-1]
+                    else:
+                        text += event.unicode
+
+        # Clear the screen
+        username_screen.fill(BG_COLOR)
+
+        # Render title
+        title = title_font.render('Enter Your Username', True, WHITE)
+        title_rect = title.get_rect(center=(screen_width // 2, 150))
+        username_screen.blit(title, title_rect)
+
+        # Render instructions
+        instructions = input_font.render('Press ENTER to confirm', True, (150, 150, 200))
+        instructions_rect = instructions.get_rect(center=(screen_width // 2, 200))
+        username_screen.blit(instructions, instructions_rect)
+
+        # Render input box
+        txt_surface = input_font.render(text, True, TEXT_COLOR)
+        width = max(screen_width - 100, txt_surface.get_width() + 10)
+        input_box.w = width
+
+        # Draw the input box
+        pygame.draw.rect(username_screen, color, input_box)
+        pygame.draw.rect(username_screen, WHITE, input_box, 2)  # Border
+
+        # Render the text
+        text_rect = txt_surface.get_rect(center=input_box.center)
+        username_screen.blit(txt_surface, text_rect)
+
+        # Update the display
+        pygame.display.flip()
+
+    # Switch back to the original display mode
+    pygame.display.set_mode((screen_width, screen_height))
+    pygame.display.set_caption('Tetris')
+
+    # Return the username or default if empty
+    return text.strip() if text.strip() else "Anonymous"
+
+
+def submit_score(username, score, level):
+    try:
+        payload = {
+            "username": username,
+            "score": score,
+            "level": level
+        }
+        response = requests.post(API_ENDPOINT, json=payload, timeout=5)
+        if response.status_code == 200:
+            print("Score submitted successfully")
+            return True
+        else:
+            print(f"Failed to submit score. Status code: {response.status_code}")
+            return False
+    except requests.RequestException as e:
+        print(f"Error submitting score: {e}")
+        return False
+
+
 def main():
+    username = get_username()
     tetris = Tetris(ROWS, COLS)
     space_pressed = False
     counter = 0
     move = True
+    score_submitted = False
 
     run = True
     while run:
@@ -213,6 +328,7 @@ def main():
 
             if keys[pygame.K_r]:
                 tetris.__init__(ROWS, COLS)
+                score_submitted = False
 
             if keys[pygame.K_ESCAPE] or keys[pygame.K_q]:
                 run = False
@@ -258,13 +374,18 @@ def main():
                                     (CELL * (tetris.next.x + j - 4), HEIGHT - 100 + CELL * (tetris.next.y + i)))
 
         if tetris.end:
+            if not score_submitted:
+                submit_score(username, tetris.score, tetris.level)
+                score_submitted = True
             tetris.end_game()
 
         score_text = font.render(f"{tetris.score}", True, WHITE)
         level_text = font2.render(f"level: {tetris.level}", True, WHITE)
+        username_text = font2.render(f"Player: {username}", True, WHITE)
 
         SCREEN.blit(score_text, (250 - score_text.get_width() // 2, HEIGHT - 110))
         SCREEN.blit(level_text, (250 - level_text.get_width() // 2, HEIGHT - 30))
+        SCREEN.blit(username_text, (10, HEIGHT - 20))
 
         pygame.display.update()
         clock.tick(FPS)
