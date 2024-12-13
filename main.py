@@ -2,8 +2,6 @@ import sys
 import pygame
 import random
 import requests
-import tkinter as tk
-from tkinter import simpledialog
 
 pygame.init()
 
